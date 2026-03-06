@@ -1,6 +1,5 @@
 """
 Anima LoRA Trainer — Local Gradio UI
-Converts the citron-colab-anima-lora-trainer notebook into a local app.
 """
 
 import json
@@ -46,7 +45,7 @@ DEFAULTS = {
     "learning_rate": 0.0001,
     "max_train_epochs": 10,
     "resolution": 768,
-    "repeats": 5,
+    "repeats": 10,
     "caption_dropout": 0.1,
     "gpu_index": "0",
     # Advanced
@@ -578,10 +577,14 @@ def build_ui() -> gr.Blocks:
 
     with gr.Blocks(title="Anima LoRA Trainer") as demo:
         gr.Markdown(
-            "# 🎨 Anima LoRA Trainer\n"
-            "Local Gradio UI for training LoRA adapters on the "
-            "[Anima](https://huggingface.co/circlestone-labs/Anima) diffusion model "
-            "using [kohya-ss/sd-scripts](https://github.com/kohya-ss/sd-scripts)."
+            """# 🍋 Citron's Anima LoRA Trainer
+
+    Super Simple Gradio UI for training LoRA adapters on the <a href="https://huggingface.co/circlestone-labs/Anima" target="_blank" rel="noopener noreferrer">Anima</a> diffusion model using <a href="https://github.com/kohya-ss/sd-scripts" target="_blank" rel="noopener noreferrer">kohya-ss/sd-scripts</a>.
+
+    🚀 Runs on ~6 GB VRAM with default settings. 
+
+    Created by <a href="https://x.com/Citron_Legacy" target="_blank" rel="noopener noreferrer">Citron Legacy</a>  Please check out the <a href="https://github.com/citronlegacy/citron-anima-lora-trainer-ui" target="_blank" rel="noopener noreferrer">Code in Git</a>
+    """
         )
 
         # ── Shared state for last-generated config paths ──────────────────
