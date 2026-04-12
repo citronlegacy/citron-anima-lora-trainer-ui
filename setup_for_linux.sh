@@ -31,15 +31,15 @@ fi
 PY_VER=$("$PYTHON_BIN" --version 2>&1)
 echo "Using Python: $PYTHON_BIN  ($PY_VER)"
 
-if [ ! -d "venv" ]; then
+if [ ! -d ".venv" ]; then
     echo "[1/6] Creating virtual environment..."
-    "$PYTHON_BIN" -m venv venv
-    echo "      ✓ venv created."
+    "$PYTHON_BIN" -m venv .venv
+    echo "      ✓ .venv created."
 else
-    echo "[1/6] venv already exists — skipping creation."
+    echo "[1/6] .venv already exists — skipping creation."
 fi
 
-source venv/bin/activate
+source .venv/bin/activate
 echo "      ✓ venv activated."
 
 pip install --upgrade pip --quiet
@@ -88,7 +88,8 @@ echo "      ✓ accelerate configured."
 # 6. Download Anima models (idempotent — skips if already present)
 # -----------------------------------------------------------------------------
 echo ""
-echo "[6/6] Downloading Anima models (~5.6 GB total)..."
+echo "[6/6] Downloading Anima support models (~1.4 GB total)..."
+echo "      (The DiT base model will be downloaded automatically when you start training.)"
 echo "      This may take a while depending on your connection."
 echo ""
 
@@ -96,20 +97,8 @@ mkdir -p models/anima/dit
 mkdir -p models/anima/text_encoder
 mkdir -p models/anima/vae
 
-DIT_PATH="models/anima/dit/anima-preview.safetensors"
 QWEN_PATH="models/anima/text_encoder/qwen_3_06b_base.safetensors"
 VAE_PATH="models/anima/vae/qwen_image_vae.safetensors"
-
-if [ ! -f "$DIT_PATH" ]; then
-    echo "  Downloading DiT model (4.18 GB)..."
-    wget -c --show-progress \
-        -O "$DIT_PATH" \
-        "https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/diffusion_models/anima-preview.safetensors"
-    echo "  ✓ DiT model downloaded."
-else
-    echo "  ✓ DiT model already present — skipping."
-fi
-
 if [ ! -f "$QWEN_PATH" ]; then
     echo "  Downloading Qwen3 text encoder (1.19 GB)..."
     wget -c --show-progress \
