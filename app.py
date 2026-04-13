@@ -46,6 +46,10 @@ def get_dit_model_path(base_model: str) -> Path:
 CONFIGS_DIR.mkdir(exist_ok=True)
 LOGS_DIR.mkdir(exist_ok=True)
 
+# Project-local accelerate config — keeps use_cpu=false and mixed_precision=bf16
+# scoped to this app only. See configs/accelerate_gpu.yaml to change these.
+ACCELERATE_CONFIG = "app_configs/accelerate_gpu.yaml"
+
 # ---------------------------------------------------------------------------
 # Default settings
 # ---------------------------------------------------------------------------
@@ -554,6 +558,7 @@ def start_training(
     threads = max(int(num_cpu_threads_per_process), 1)
     cmd = [
         "accelerate", "launch",
+        "--config_file", str(ACCELERATE_CONFIG),
         "--num_cpu_threads_per_process", str(threads),
         "--gpu_ids", gpu_idx,
         str(TRAIN_SCRIPT),
