@@ -10,21 +10,21 @@ echo.
 :: -----------------------------------------------------------------------------
 :: 1. Python venv
 :: -----------------------------------------------------------------------------
-if not exist "venv" (
+if not exist ".venv" (
     echo [1/6] Creating Python virtual environment...
-    python -m venv venv
+    python -m venv .venv
     if errorlevel 1 (
         echo ERROR: Failed to create venv.
         echo        Make sure Python 3.10 is installed and in your PATH.
         pause
         exit /b 1
     )
-    echo       venv created.
+    echo       .venv created.
 ) else (
-    echo [1/6] venv already exists -- skipping creation.
+    echo [1/6] .venv already exists -- skipping creation.
 )
 
-call venv\Scripts\activate.bat
+call .venv\Scripts\activate.bat
 echo       venv activated.
 
 python -m pip install --upgrade pip --quiet
@@ -89,23 +89,14 @@ echo       accelerate configured.
 :: 6. Download Anima models (idempotent)
 :: -----------------------------------------------------------------------------
 echo.
-echo [6/6] Downloading Anima models (~5.6 GB total)...
+echo [6/6] Downloading Anima support models (~1.4 GB total)...
+echo       (The DiT base model will be downloaded automatically when you start training.)
 echo       This may take a while depending on your connection.
 echo.
 
 if not exist "models\anima\dit"          mkdir models\anima\dit
 if not exist "models\anima\text_encoder" mkdir models\anima\text_encoder
 if not exist "models\anima\vae"          mkdir models\anima\vae
-
-if not exist "models\anima\dit\anima-preview.safetensors" (
-    echo   Downloading DiT model (4.18 GB)...
-    curl -L -C - --progress-bar ^
-        -o "models\anima\dit\anima-preview.safetensors" ^
-        "https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/diffusion_models/anima-preview.safetensors"
-    echo   DiT model downloaded.
-) else (
-    echo   DiT model already present -- skipping.
-)
 
 if not exist "models\anima\text_encoder\qwen_3_06b_base.safetensors" (
     echo   Downloading Qwen3 text encoder (1.19 GB)...

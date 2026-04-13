@@ -29,8 +29,26 @@ QWEN3_MODEL = MODELS_DIR / "text_encoder" / "qwen_3_06b_base.safetensors"
 VAE_MODEL = MODELS_DIR / "vae" / "qwen_image_vae.safetensors"
 TRAIN_SCRIPT = SD_SCRIPTS_DIR / "anima_train_network.py"
 
+BASE_MODEL_URLS = {
+    "anima-preview": "https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/diffusion_models/anima-preview.safetensors",
+    "anima-preview3-base": "https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/diffusion_models/anima-preview3-base.safetensors",
+}
+
+
+def get_dit_model_path(base_model: str) -> Path:
+    """Return the local Path for the selected base model's DiT weights."""
+    filenames = {
+        "anima-preview": "anima-preview.safetensors",
+        "anima-preview3-base": "anima-preview3-base.safetensors",
+    }
+    return MODELS_DIR / "dit" / filenames.get(base_model, "anima-preview.safetensors")
+
 CONFIGS_DIR.mkdir(exist_ok=True)
 LOGS_DIR.mkdir(exist_ok=True)
+
+# Project-local accelerate config — keeps use_cpu=false and mixed_precision=bf16
+# scoped to this app only. See configs/accelerate_gpu.yaml to change these.
+ACCELERATE_CONFIG = "app_configs/accelerate_gpu.yaml"
 
 # ---------------------------------------------------------------------------
 # Default settings
@@ -38,6 +56,7 @@ LOGS_DIR.mkdir(exist_ok=True)
 DEFAULTS = {
     # Basic
     "project_name": "my_lora",
+    "base_model": "anima-preview",
     "image_directory": "",
     "output_directory": "",
     "network_dim": 20,
@@ -273,7 +292,7 @@ def create_dataset_config(
 # ---------------------------------------------------------------------------
 
 def configure_training(
-    project_name, image_directory, output_directory,
+    project_name, base_model, image_directory, output_directory,
     network_dim, network_alpha, learning_rate, max_train_epochs,
     resolution, repeats, caption_dropout, gpu_index_choice,
     # advanced
@@ -342,13 +361,18 @@ def configure_training(
     # --- Validate models ---
     lines.append("")
     lines.append("Checking models...")
+    dit_model = get_dit_model_path(base_model)
     missing_models = []
-    for label, path in [("DiT", DIT_MODEL), ("Qwen3", QWEN3_MODEL), ("VAE", VAE_MODEL)]:
+    for label, path in [("DiT", dit_model), ("Qwen3", QWEN3_MODEL), ("VAE", VAE_MODEL)]:
         if Path(path).exists():
             lines.append(f"  ✓ {label}: {path}")
         else:
-            lines.append(f"  ✗ {label} missing: {path}")
-            missing_models.append(label)
+            if label == "DiT":
+                lines.append(f"  ℹ {label}: {path}")
+                lines.append(f"      (will auto-download when training starts)")
+            else:
+                lines.append(f"  ✗ {label} missing: {path}")
+                missing_models.append(label)
     if missing_models:
         lines.append("")
         lines.append(f"❌ Missing models: {', '.join(missing_models)}")
@@ -362,7 +386,7 @@ def configure_training(
         train_cfg = create_training_config(
             project_name=project_name,
             output_dir=output_directory,
-            dit_model_path=DIT_MODEL,
+            dit_model_path=dit_model,
             qwen3_model_path=QWEN3_MODEL,
             vae_model_path=VAE_MODEL,
             network_dim=network_dim,
@@ -407,6 +431,7 @@ def configure_training(
     # --- Save all settings to config.json ---
     cfg = {
         "project_name": project_name,
+        "base_model": base_model,
         "image_directory": image_directory,
         "output_directory": output_directory,
         "network_dim": int(network_dim),
@@ -456,6 +481,7 @@ def start_training(
     custom_config_path: str,
     gpu_index_choice: str,
     num_cpu_threads_per_process: int,
+    base_model: str,
 ):
     """
     Generator: yields growing log text as training runs.
@@ -467,6 +493,38 @@ def start_training(
     def emit(line: str):
         log_lines.append(line)
         return "\n".join(log_lines)
+
+    # --- Auto-download DiT model if needed ---
+    dit_model = get_dit_model_path(base_model)
+    if not dit_model.exists():
+        url = BASE_MODEL_URLS.get(base_model)
+        if not url:
+            yield emit(f"❌ Unknown base model: {base_model}")
+            return
+        yield emit(f"⏳ Downloading base model '{base_model}'...")
+        yield emit(f"   This may take a few minutes. Future runs will skip this step.")
+        yield emit(f"   Destination: {dit_model}")
+        yield emit("")
+        os.makedirs(dit_model.parent, exist_ok=True)
+        try:
+            dl_proc = subprocess.Popen(
+                ["wget", "-c", "--show-progress", "-O", str(dit_model), url],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True,
+                bufsize=1,
+            )
+            for line in iter(dl_proc.stdout.readline, ""):
+                yield emit(line.rstrip("\n"))
+            dl_proc.wait()
+            if dl_proc.returncode != 0:
+                yield emit(f"❌ Download failed (exit code {dl_proc.returncode})")
+                return
+            yield emit(f"✓ Base model downloaded successfully.")
+            yield emit("")
+        except FileNotFoundError:
+            yield emit("❌ 'wget' not found. Install wget and try again.")
+            return
 
     # --- Resolve config paths ---
     saved_cfg = load_config()
@@ -500,6 +558,7 @@ def start_training(
     threads = max(int(num_cpu_threads_per_process), 1)
     cmd = [
         "accelerate", "launch",
+        "--config_file", str(ACCELERATE_CONFIG),
         "--num_cpu_threads_per_process", str(threads),
         "--gpu_ids", gpu_idx,
         str(TRAIN_SCRIPT),
@@ -610,6 +669,13 @@ def build_ui() -> gr.Blocks:
                             label="GPU",
                             choices=GPU_CHOICES,
                             value=default_gpu,
+                        )
+                    with gr.Row():
+                        base_model_dropdown = gr.Dropdown(
+                            label="Base Model",
+                            choices=["anima-preview", "anima-preview3-base"],
+                            value=cfg.get("base_model", "anima-preview"),
+                            info="Select Base Model (Model will auto download when you click start training. this may take a few minutes but future runs will not need to download.)",
                         )
                     image_directory = gr.Textbox(
                         label="Image Directory (flat folder with images + .txt captions)",
@@ -858,7 +924,7 @@ def build_ui() -> gr.Blocks:
         ]
 
         basic_inputs = [
-            project_name, image_directory, output_directory,
+            project_name, base_model_dropdown, image_directory, output_directory,
             network_dim, network_alpha, learning_rate, max_train_epochs,
             resolution, repeats, caption_dropout, gpu_dropdown,
         ]
@@ -873,7 +939,7 @@ def build_ui() -> gr.Blocks:
         # ── Start Training event (generator → streaming) ─────────────────
         train_btn.click(
             fn=start_training,
-            inputs=[custom_config_input, gpu_dropdown, num_cpu_threads],
+            inputs=[custom_config_input, gpu_dropdown, num_cpu_threads, base_model_dropdown],
             outputs=[log_box],
         )
 
