@@ -588,13 +588,15 @@ def start_training(
             bufsize=1,
             env=env,
             cwd=str(ROOT),
+            encoding="utf-8",
+            errors="ignore",
         )
     except FileNotFoundError:
         yield emit("❌ 'accelerate' not found. Make sure the venv is activated and accelerate is installed.")
         return
 
     # --- Stream output ---
-    with open(log_file_path, "w") as log_f:
+    with open(log_file_path, "w", encoding="utf-8", errors="ignore") as log_f:
         log_f.write(f"Command: {' '.join(cmd)}\n")
         log_f.write(f"Started: {datetime.now().isoformat()}\n\n")
 
